@@ -179,7 +179,7 @@ def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition):
     B_dot = B1c*Omega  
   
     
-    B0_old = 0. ## Assuming no coning for now
+    B0_old = 0 ## Assuming no coning for now
 
     mu =  V_inf*np.cos(alpha_tpp)/ (Omega * R_tip)  # advance ratio
 
