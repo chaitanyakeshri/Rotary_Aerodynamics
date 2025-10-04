@@ -110,7 +110,7 @@ def Mission_Planner(initial_fuel_weight):
             rotor["collective"] = trim["collective"]
             rotor["cyclic_s"] = trim["cyclic_s"]
             rotor["cyclic_c"] = trim["cyclic_c"]
-            res = Sim_Start_Forward_Flight(rotor=rotor, rotor_aero=rotor_aero,
+            res = Sim_Start_Forward(rotor=rotor, rotor_aero=rotor_aero,
                                            engine=engine, flight_condition=flight_condition_now)
             phase_power = res[0]["P"] / (1 - tail_rotor["power_fraction"]) / (1 - engine["engines_loss"])
             if phase_power > corrected_engine_power:
