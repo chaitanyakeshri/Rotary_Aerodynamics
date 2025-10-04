@@ -90,3 +90,16 @@ flight_condition = {
 payload = {
     "weight": 700
 }
+
+
+mission_profile = [
+    {"type": "hover", "duration_minutes": 5, "altitude_m": 2000, "payload_change_kg": 0},
+    {"type": "climb", "target_altitude_m": 2500, "climb_rate_mps": 5},
+    {"type": "cruise", "distance_km": 50, "speed_kph": 200, "altitude_m": 2500, "wind_kph": -30},  # 30 kmph headwind
+    {"type": "loiter", "duration_minutes": 10, "speed_kph": 150, "altitude_m": 2500, "wind_kph": -30},
+    {"type": "event", "payload_change_kg": -700}, # Unloading payload
+    {"type": "cruise", "distance_km": 50, "speed_kph": 200, "altitude_m": 2500, "wind_kph": 15},   # 15 kmph tailwind
+    # will add descent and landing segments later
+]
+trim_settings = {}  # Fill this with your trim data
+
