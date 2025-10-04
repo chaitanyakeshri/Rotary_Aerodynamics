@@ -117,7 +117,7 @@ def iterative_solver_forward(
         # grids
         R = np.linspace(R_root, R_tip, N)
         SIGH = np.linspace(0, 2*np.pi, 90)
-        R_grid, SIGH_grid = np.meshgrid(R, SIGH, indexing='ij')  # shape (N, 360)
+        R_grid, SIGH_grid = np.meshgrid(R, SIGH, indexing='ij')  # shape (N, 90)
 
 
         # allocate arrays for results
