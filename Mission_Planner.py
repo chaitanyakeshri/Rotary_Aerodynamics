@@ -9,11 +9,7 @@ from helper_functions import *
 from Params import rotor, rotor_aero, engine, flight_condition, fuselage, payload, tail_rotor, mission_profile, trim_settings
 
 def Mission_Planner(initial_fuel_weight):
-    """
-    A simplified and robust mission planner that calculates performance based on
-    pre-calculated trim settings stored in Params.py.
-    This version does NOT call the complex trim-finding logic and avoids the ValueError.
-    """
+   
     if initial_fuel_weight > fuselage["max_fuel_weight"]:
         print(f"Mission Failed: Fuel weight exceeds max of {fuselage['max_fuel_weight']} kg")
         return
@@ -90,7 +86,7 @@ def Mission_Planner(initial_fuel_weight):
         elif segment['type'] in ['cruise', 'loiter']:
             air_speed_kph = segment.get("speed_kph", 0)
             
-            # Get pre-calculated trim controls from your Params.py file
+            # Get pre-calculated trim controls from Params.py file
             if air_speed_kph not in trim_settings:
                 print(f"Mission Failed: No trim settings found in Params.py for {air_speed_kph} kph.")
                 return
@@ -115,7 +111,7 @@ def Mission_Planner(initial_fuel_weight):
             AR = (rotor["Rt"] - rotor["Rr"]) / ((rotor["chord_root"] + rotor["chord_tip"]) / 2)
             Cd_fn = lambda r, sigh: airfoil_drag(Cd0=rotor_aero["Cd0"], Cl=Cl_fn(r, sigh), e=rotor_aero["e"], AR=AR)
             
-            # --- Call the low-level solver directly (Bypasses the error) ---
+            
             res = iterative_solver_forward(
                 b=rotor["b"], rho=rho, Ut_fn=lambda r, sigh: engine["omega"] * r + V_inf,
                 Up_fn=lambda r, sigh: v_fn(r, sigh),
