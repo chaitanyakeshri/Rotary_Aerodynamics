@@ -152,6 +152,6 @@ def Mission_Planner(initial_fuel_weight):
             weights.append(fuselage["Empty_Weight"] + current_payload + current_fuel)
             print(f"Leg End | Power: {phase_power/1e3:.1f} kW | Fuel: {current_fuel:.2f} kg | Weight: {weights[-1]:.2f} kg")
 
-    print("\nMission Feasible ✅")
+    print(f"\nMission Completed Successfully! Final Weight: {weights[-1]:.2f} kg, Total Distance: {total_distance_km:.2f} km")
     # PLOTTING
     
