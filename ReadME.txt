@@ -1,3 +1,8 @@
-Run the Missionn Planner by passing the required dictionaries in code.
-Update the values on your helicopter in the repsective dictionaries and run the mission planner 
-To use the Flight Performance Simulator Only ... uncomment the Sim_Start() funtion and pass thr required fields 
+Run the test_run.ipynb file. 
+Separate cells for hover and forward flight.
+
+Flight velocity can be changed using:
+flight_condition[velocity]=[input_velocity,0,0]
+
+Rotor parameters can also be changed accordingly as:
+rotor[theta_root]=5      # (Say)
