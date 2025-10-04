@@ -5,142 +5,150 @@ import matplotlib.pyplot as plt
 from Solver import *
 from helper_functions import *
 from Simulator import *
-from Params import *
+from Simulator import Sim_Start_Forward
+from Params import rotor, rotor_aero, engine, flight_condition, fuselage, payload, tail_rotor, mission_profile,trim_settings
 
-def Mission_Planner(fuel_weight, hover_endurance, climb_endurance, climb_velocity):
+def Mission_Planner(initial_fuel_weight):
 
-    if fuel_weight > fuselage["max_fuel_weight"]:
+    if initial_fuel_weight > fuselage["max_fuel_weight"]:
         print(f"Mission Failed: Fuel weight exceeds max of {fuselage['max_fuel_weight']} kg")
         return
 
     corrected_engine_power = engine["max_power_avail"] * density_ratio(flight_condition["altitude"])
 
-    # -------------------- INITIAL TOGW --------------------
-    TOGW = fuel_weight + fuselage["Empty_Weight"] + payload["weight"]
-    print("TAKe offf gross weight",TOGW)
+     # Track payload separately to handle in-mission changes
+    current_payload = payload["weight"]
+    current_fuel = initial_fuel_weight
+    TOGW = fuselage["Empty_Weight"] + current_payload + current_fuel
     
-    times, weights, fuels, hover_SEs, climb_SEs = [], [], [], [], []
-    fuel_rates = []   # store phase_fuel_rate values
-    phases = []       # keep track of phase (hover/climb)
-    pahse_power_arr = []
+    # Initialize arrays with the starting point (t=0)
+    times = [0]
+    weights = [TOGW]
+    fuels = [current_fuel]
+    distances = [0] # Add distance tracking
 
-    current_fuel = fuel_weight
-    current_weight = TOGW
-    t = 0
+    t = 0  # Represents total elapsed time in minutes
+    total_distance_km = 0
+    print(f"Initial TOGW: {TOGW:.2f} kg")
+    #---------------------Simulation Setup---------------------
+    for i, segment in enumerate(mission_profile):
+        print(f"\n--- Starting Segment {i+1}: {segment['type'].upper()} ---")
 
-    # -------------------- SIMULATION LOOP --------------------
-    for phase, duration in [("hover", hover_endurance), ("climb", climb_endurance)]:
-        for i in range(int(duration)):
+        # Set altitude for the segment
+        flight_condition["altitude"] = segment.get("altitude_m", flight_condition["altitude"])
+        corrected_engine_power = engine["max_power_avail"] * density_ratio(flight_condition["altitude"])
+        
+        # --- HANDLE EVENT SEGMENT (e.g., payload drop) ---
+        if segment['type'] == 'event':
+            payload_change = segment.get("payload_change_kg", 0)
+            current_payload += payload_change
+            print(f"Payload changed by {payload_change} kg. New payload: {current_payload} kg.")
+            # Update the last recorded weight to reflect the change instantly
+            weights[-1] = fuselage["Empty_Weight"] + current_payload + fuels[-1]
+            continue # Move to the next segment
 
-            thrust_req = current_weight * 9.81
-
-            if phase == "hover":
+        # --- HANDLE HOVER SEGMENT ---
+        elif segment['type'] == 'hover':
+            # This block will contain our existing hover logic, but adapted
+            # to run for the duration specified in the segment dictionary.
+            duration_minutes = segment['duration_minutes']
+            for minute in range(int(duration_minutes)):
+                current_weight = fuselage["Empty_Weight"] + current_payload + current_fuel
+                thrust_req = current_weight * 9.81
                 flight_condition_now = flight_condition.copy()
-                flight_condition_now["velocity"] = [0, 0, 0]
-            else:
-                flight_condition_now = flight_condition.copy()
-                flight_condition_now["velocity"] = [0, 0, climb_velocity]
+                flight_condition_now["velocity"] = [0, 0, 0]   
+                found_collective = None 
+                for col in np.linspace(0, rotor_aero["alpha_stall"]+1, 100):
+                    rotor["collective"] = col
+                    res = Sim_Start_Hover_Climb(rotor=rotor, rotor_aero=rotor_aero,
+                                    engine=engine, flight_condition=flight_condition_now)
+                    if res[0]["stall_status"] == 1:
+                        continue
+                    if res[0]["T"] >= thrust_req:
+                        found_collective = col
+                        break
+                if found_collective is None:
+                    print(f"Mission Failed: Cannot sustain hover at t={t} min")
+                    return
+                phase_power = res[0]["P"] / (1 - tail_rotor["power_fraction"]) / (1 - engine["engines_loss"])
+                if phase_power > corrected_engine_power:
+                    print(f"Mission Failed: Insufficient hover power {phase_power} > {corrected_engine_power} at t={t} min for {TOGW} kg")
+                    return
+                # Fuel burn this minute
+                bsfc = engine["bsfc"]  # kg/kWh
+                hover_fuel_rate = (bsfc * (phase_power/1000)) / 60  # kg/min
+                current_fuel -= hover_fuel_rate
+                current_fuel = max(current_fuel, 0)
+                if current_fuel <= 0:
+                    print(f"Fuel exhausted at t={t+1} min during hover. Mission Failed.")
+                    return
+                           
+                 # 3. Update and append logs for this time step
+                t += 1
+                # Distance does not change in hover, so total_distance_km is constant
+                
+                times.append(t)
+                fuels.append(current_fuel)
+                weights.append(fuselage["Empty_Weight"] + current_payload + current_fuel)
+                distances.append(total_distance_km)
 
-            found_collective = None
-            for col in np.linspace(0, rotor_aero["alpha_stall"]+1, 100):
-                rotor["collective"] = col
-                res = Sim_Start_Hover_Climb(rotor=rotor, rotor_aero=rotor_aero,
-                                engine=engine, flight_condition=flight_condition_now)
-                if res[0]["stall_status"] == 1:
-                    continue
-                if res[0]["T"] >= thrust_req:
-                    found_collective = col
-                    break
-
-            if found_collective is None:
-                print(f"Mission Failed: Cannot sustain {phase} at t={t} min")
+                print(f"t={t} min | Hovering | Fuel: {current_fuel:.2f} kg | Weight: {weights[-1]:.2f} kg")
+                continue  # Move to the next segment after hover
+        # --- HANDLE F0RWARD FLIGHT  ---
+        elif segment['type'] in ['cruise','loiter']:
+            current_weight = fuselage["Empty_Weight"] + current_payload + current_fuel
+            air_speed_kph = segment.get("speed_kph", 0)
+            wind_kph = segment.get("wind_kph", 0)
+            ground_speed_kph = air_speed_kph + wind_kph
+            if ground_speed_kph <= 0:
+                print(f"Mission Failed: Non-positive ground speed {ground_speed_kph} kph in {segment['type']} segment.")
                 return
-
+            #Simulator with airspeed and trim conditions
+            flight_condition_now = flight_condition.copy()
+            flight_condition_now["velocity"] = [air_speed_kph * 1000 / 3600, 0, 0]  # Convert kph to m/s
+            trim = trim_settings[air_speed_kph]
+            rotor["collective"] = trim["collective"]
+            rotor["cyclic_s"] = trim["cyclic_s"]
+            rotor["cyclic_c"] = trim["cyclic_c"]
+            res = Sim_Start_Forward(rotor=rotor, rotor_aero=rotor_aero,
+                                           engine=engine, flight_condition=flight_condition_now)
             phase_power = res[0]["P"] / (1 - tail_rotor["power_fraction"]) / (1 - engine["engines_loss"])
-            pahse_power_arr.append(phase_power)
             if phase_power > corrected_engine_power:
-                print(f"Mission Failed: Insufficient {phase} power {phase_power} > {corrected_engine_power} at t={t} min for {TOGW} kg")
+                print(f"Mission Failed: Insufficient {segment['type']} power {phase_power} > {corrected_engine_power} at t={t} min for {TOGW} kg")
                 return
-
-            # Fuel burn this minute
-            bsfc = engine["bsfc"]  # kg/kWh
-            phase_fuel_rate = (bsfc * (phase_power/1000)) / 60  # kg/min
-            current_fuel -= phase_fuel_rate
-            current_fuel = max(current_fuel, 0)
-
-            # Update weights
-            current_weight = fuselage["Empty_Weight"] + payload["weight"] + current_fuel
-
-            # Store results
+            fuel_rate_kgh = engine["bsfc"] * (phase_power / 1000)  # kg/h
+            #Calculate Fuel burn and distance based on segment type
+            if segment['type'] == 'cruise':
+                distance_km = segment.get("distance_km", 0)
+                duration_hours = distance_km / ground_speed_kph
+                duration_minutes = duration_hours * 60
+                cruise_fuel_rate = fuel_rate_kgh / 60  # kg/min
+                total_fuel_burn = cruise_fuel_rate * duration_minutes
+                if total_fuel_burn > current_fuel:
+                    print(f"Mission Failed: Insufficient fuel for cruise segment at t={t} min.")
+                    return
+                current_fuel -= total_fuel_burn
+                t += int(duration_minutes)
+                total_distance_km += distance_km
+            elif segment['type'] == 'loiter':
+                duration_minutes = segment.get("duration_minutes", 0)
+                loiter_fuel_rate = fuel_rate_kgh / 60  # kg/min
+                total_fuel_burn = loiter_fuel_rate * duration_minutes
+                if total_fuel_burn > current_fuel:
+                    print(f"Mission Failed: Insufficient fuel for loiter segment at t={t} min.")
+                    return
+                current_fuel -= total_fuel_burn
+                t += int(duration_minutes)
+                # Distance does not change in loiter, so total_distance_km is constant
+                # Update logs for this segment
             times.append(t)
-            weights.append(current_weight)
             fuels.append(current_fuel)
-            fuel_rates.append(phase_fuel_rate)
-            phases.append(phase)
+            weights.append(fuselage["Empty_Weight"] + current_payload + current_fuel)
+            distances.append(total_distance_km)
+            print(f"t={t} min | {segment['type'].capitalize()} | Fuel: {current_fuel:.2f} kg | Weight: {weights[-1]:.2f} kg | Distance: {total_distance_km:.2f} km")
+            continue  
+        #-----------------Plotting and Summary-----------------
+     
+  
 
-            # SE storage
-            SE = 1/phase_fuel_rate if phase_fuel_rate > 0 else np.inf
-            if phase == "hover":
-                hover_SEs.append(SE)
-                climb_SEs.append(None)
-            else:
-                hover_SEs.append(None)
-                climb_SEs.append(SE)
-
-            # Print status
-            print(f"\n--- t = {t} min | Phase: {phase.upper()} ---")
-            print(f"Gross Weight: {current_weight:.2f} kg | Fuel Remaining: {current_fuel:.2f} kg")
-            print(f"Fuel Rate: {phase_fuel_rate:.4f} kg/min")
-
-            t += 1
-            if current_fuel <= 0:
-                print(f"Fuel exhausted at t={t} min")
-                return 
-            
-
-    print("\nMission Feasible ✅")
-    print(f"Initial TOGW: {TOGW:.1f} kg")
-    print(f"Total Fuel Used: {fuel_weight - current_fuel:.2f} kg")
-    print(f"Final TOGW: {current_weight:.2f} kg")   
-    print("collective angle",found_collective)
-    print(f"Total Mission Time: {t} minutes")
-    print("Avialable Power (W)",corrected_engine_power)
-    print("Power Required(W)", pahse_power_arr[-1])
-    
-
-    # -------------------- PLOTTING --------------------
-    # 1. Vehicle Weight vs Time
-    plt.figure(figsize=(10, 5))
-    plt.plot(times, weights, label="Vehicle Weight (kg)", linewidth=2)
-    plt.title("Vehicle Weight vs Time")
-    plt.xlabel("Time (minutes)")
-    plt.ylabel("Weight (kg)")
-    plt.grid(True, linestyle="--", alpha=0.7)
-    plt.legend()
-    plt.show()
-
-    # 2. Fuel Remaining vs Time
-    plt.figure(figsize=(10, 5))
-    plt.plot(times, fuels, label="Fuel Remaining (kg)", linewidth=2, color="orange")
-    plt.title("Fuel Remaining vs Time")
-    plt.xlabel("Time (minutes)")
-    plt.ylabel("Fuel (kg)")
-    plt.grid(True, linestyle="--", alpha=0.7)
-    plt.legend()
-    plt.show()
-
-    # 3. Phase Fuel Rate vs TOGW (kgf instead of kg)
-    plt.figure(figsize=(8, 6))
-    for phase_name, color in zip(["hover", "climb"], ["green", "red"]):
-        x = [f for f, p in zip(fuel_rates, phases) if p == phase_name]
-        y = [w * 9.81 for w, p in zip(weights, phases) if p == phase_name]  # convert to kgf
-        if x and y:
-            plt.plot(x, y, label=phase_name.capitalize(), linewidth=2, color=color)
-
-    plt.title("Phase Fuel Rate vs TOGW")
-    plt.xlabel("Fuel Burn Rate (kg/min)")
-    plt.ylabel("Gross Weight (kgf)")
-    plt.grid(True, linestyle="--", alpha=0.7)
-    plt.legend()
-    plt.show()
 
