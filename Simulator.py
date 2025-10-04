@@ -391,9 +391,9 @@ def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition, t_horizon_s):
     print(f"Rolling moment    = {res['Mr']:.4f} Nm")
     print(f"Pitching moment   = {res['Mp']:.4f} Nm")
 
-    print(f"cyclic_c:          = {out["cyclic_c"]:.2f} deg")
-    print(f"cyclic_s:          = {out["cyclic_s"]:.2f} deg")
-    print(f"Tail collective    = {out["tail_coll"]:.2f} deg")
+    print(f"cyclic_c:          = {out['cyclic_c']:.2f} deg")
+    print(f"cyclic_s:          = {out['cyclic_s']:.2f} deg")
+    print(f"Tail collective    = {out['tail_coll']:.2f} deg")
 
     # # --- Optional: print convergence histories ---
     # print("\nHistory of convergence:")

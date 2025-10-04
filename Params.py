@@ -97,3 +97,17 @@ payload = {
     "weight": 700,
     "payload_pos": (1.0,0.5,0.0), # relative to centroid
 }
+mission_profile = [
+    {"type": "hover", "duration_minutes": 5, "altitude_m": 2000},
+    {"type": "climb", "target_altitude_m": 2500, "climb_rate_mps": 5},
+    {"type": "cruise", "distance_km": 150, "speed_kph": 200, "altitude_m": 2500, "wind_kph": -20}, # 20 kph headwind
+    {"type": "loiter", "duration_minutes": 10, "speed_kph": 150, "altitude_m": 2500, "wind_kph": -20},
+    {"type": "event", "payload_change_kg": -700}, # Unload payload
+    {"type": "cruise", "distance_km": 150, "speed_kph": 200, "altitude_m": 2500, "wind_kph": 0},
+]
+trim_settings = {
+    # speed_kph: {rotor inputs}
+    150: {"collective": 4.8, "cyclic_s": -2.2, "cyclic_c": -0.05},
+    200: {"collective": 5.0, "cyclic_s": -2.5, "cyclic_c": -0.02},
+    #mission_profile
+}

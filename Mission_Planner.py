@@ -111,7 +111,7 @@ def Mission_Planner(initial_fuel_weight):
             rotor["cyclic_s"] = trim["cyclic_s"]
             rotor["cyclic_c"] = trim["cyclic_c"]
             res = Sim_Start_Forward(rotor=rotor, rotor_aero=rotor_aero,
-                                           engine=engine, flight_condition=flight_condition_now)
+                                           engine=engine, flight_condition=flight_condition_now,t_horizon_s=30)
             phase_power = res[0]["P"] / (1 - tail_rotor["power_fraction"]) / (1 - engine["engines_loss"])
             if phase_power > corrected_engine_power:
                 print(f"Mission Failed: Insufficient {segment['type']} power {phase_power} > {corrected_engine_power} at t={t} min for {TOGW} kg")
@@ -149,6 +149,9 @@ def Mission_Planner(initial_fuel_weight):
             continue  
         #-----------------Plotting and Summary-----------------
      
-  
-
-
+    print("\nMission Feasible ✅")
+    print(f"Total Fuel Used: {initial_fuel_weight - current_fuel:.2f} kg")
+    print(f"Total Mission Time: {t:.1f} minutes")
+    print(f"Total Distance Covered: {total_distance_km:.1f} km")
+    
+   
