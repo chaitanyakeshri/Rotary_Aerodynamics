@@ -107,7 +107,7 @@ mission_profile = [
 ]
 trim_settings = {
     # speed_kph: {rotor inputs}
-    150: {"collective": 4.8, "cyclic_s": -2.2, "cyclic_c": -0.05},
+    150: {"collective": 4.8, "cyclic_s": -7.5, "cyclic_c": 4.98},
     200: {"collective": 5.0, "cyclic_s": -2.5, "cyclic_c": -0.02},
     #mission_profile
 }
