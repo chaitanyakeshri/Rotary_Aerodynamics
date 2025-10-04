@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from Solver import *
 from helper_functions import *
 from Simulator import *
-from Simulator import Sim_Start_Forward_Flight
+from Simulator import Sim_Start_Forward
 from Params import rotor, rotor_aero, engine, flight_condition, fuselage, payload, tail_rotor, mission_profile,trim_settings
 
 def Mission_Planner(initial_fuel_weight):
@@ -146,6 +146,9 @@ def Mission_Planner(initial_fuel_weight):
             weights.append(fuselage["Empty_Weight"] + current_payload + current_fuel)
             distances.append(total_distance_km)
             print(f"t={t} min | {segment['type'].capitalize()} | Fuel: {current_fuel:.2f} kg | Weight: {weights[-1]:.2f} kg | Distance: {total_distance_km:.2f} km")
-            continue  # Move to the next segment after cruise/loiter   
+            continue  
+        #-----------------Plotting and Summary-----------------
+     
+     #plotting
 
 

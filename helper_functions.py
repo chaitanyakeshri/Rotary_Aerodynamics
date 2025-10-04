@@ -48,6 +48,7 @@ def atmosphere(altitude, delta_ISA=0.0):
 
 
 
+
 def airfoil_lift(Cl0, Cl_alpha, alpha0, alpha,alpha_stall=15.0):
     """
     Calculates lift coefficient for a given airfoil at a specified angle of attack in degrees.
@@ -601,3 +602,6 @@ def Beta(Sigh):
     """
 
     return beta0(rotor["lock_number"]) + rotor["cyclic_c"] * np.cos(Sigh) + rotor["cyclic_s"] * np.sin(Sigh)
+
+
+
