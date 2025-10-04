@@ -215,12 +215,12 @@ def iterative_solver_forward(
         T, D, Q, P, R, SIGH,rolling_moment,pitching_moment,dT_dr_1b, dD_total_dr_1b, dQ_total_dr_1b, dP_total_dr_1b, q= compute_T_D_Q_P_on_grid(N)
 
         # --- history initialization (ensure counts match) ---
-        history_T = []
-        history_D = []
-        history_Q = []
-        history_P = []
-        history_rolling_moment = []
-        history_pitching_moment = []
+        history_T.append(T)
+        history_D.append(D)
+        history_Q.append(Q)
+        history_P.append(P)
+        history_rolling_moment.append(rolling_moment)
+        history_pitching_moment.append(pitching_moment)
 
 
         if T_prev is not None:
