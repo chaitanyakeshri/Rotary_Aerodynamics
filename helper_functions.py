@@ -2,11 +2,8 @@ import numpy as np
 import math
 ## functional imports 
 from Solver import *
-from Simulator import * 
 from Params import * 
 import numpy as np
-
-
 
 
 def atmosphere(altitude, delta_ISA=0.0):
@@ -46,8 +43,90 @@ def atmosphere(altitude, delta_ISA=0.0):
     
     return {"T": T, "p": p, "rho": rho, "a": a}
 
+def compute_MoI(fuselage,payload):
+    """
+    Compute I_roll and I_pitch for a fuselage split into front and tail.
+    Front: larger radius, 10/11 of fuselage mass
+    Tail: smaller radius, 1/11 of fuselage mass
+    Both treated as solid cylinders along x-axis.
+    """
 
+    m_empty=fuselage['Empty_Weight']     # fuselage characteristics
+    m_fuel=fuselage["max_fuel_weight"]
+    L_front=fuselage["length_front"]
+    L_tail=fuselage["length_tail"]
+    R_front=fuselage["radius_front"]
+    R_tail=fuselage["radius_tail"]
+    fuel_pos=fuselage["fuel_pos"]
 
+    m_payload=payload["weight"] # payload characteristics
+    payload_pos=payload["payload_pos"]
+
+    # Assign fuselage mass split
+    m_tail = m_empty * 1/11
+    m_front = m_empty * 10/11
+
+    # centroid positions along x-axis
+    L_total = L_front + L_tail
+    x_front_c = L_front/2 - L_total/2
+    x_tail_c  = L_front + L_tail/2 - L_total/2
+
+    r_front   = np.array([x_front_c, 0.0, 0.0])
+    r_tail    = np.array([x_tail_c, 0.0, 0.0])
+    r_fuel    = np.array(fuel_pos)
+    r_payload = np.array(payload_pos)
+
+    # overall COM
+    total_mass = m_front + m_tail + m_fuel + m_payload
+    com = (m_front*r_front + m_tail*r_tail +
+           m_fuel*r_fuel + m_payload*r_payload) / total_mass
+
+    # cylinder inertia about own centroid
+    def cylinder_inertia(m,L,R):
+        I_x = 0.5*m*R**2
+        I_y = (1/12)*m*(3*R**2 + L**2)
+        I_z = I_y
+        return I_x, I_y, I_z
+
+    I_front_x, I_front_y, I_front_z = cylinder_inertia(m_front, L_front, R_front)
+    I_tail_x,  I_tail_y,  I_tail_z  = cylinder_inertia(m_tail,  L_tail,  R_tail)
+
+    # shift inertia to overall COM
+    def shift_inertia(Ic, m, r_c):
+        d = r_c - com
+        dx, dy, dz = d
+        d2 = dx*dx + dy*dy + dz*dz
+        I_x = Ic[0] + m*(d2 - dx*dx)
+        I_y = Ic[1] + m*(d2 - dy*dy)
+        I_z = Ic[2] + m*(d2 - dz*dz)
+        return I_x, I_y, I_z
+
+    I_front_x, I_front_y, I_front_z = shift_inertia((I_front_x,I_front_y,I_front_z), m_front, r_front)
+    I_tail_x,  I_tail_y,  I_tail_z  = shift_inertia((I_tail_x, I_tail_y, I_tail_z),  m_tail,  r_tail)
+
+    # point masses: fuel and payload
+    def point_inertia(m, r):
+        xr, yr, zr = r - com
+        I_x = m*(yr**2 + zr**2)
+        I_y = m*(xr**2 + zr**2)
+        I_z = m*(xr**2 + yr**2)
+        return I_x, I_y, I_z
+
+    I_fuel_x, I_fuel_y, I_fuel_z = point_inertia(m_fuel, r_fuel)
+    I_pay_x,  I_pay_y,  I_pay_z  = point_inertia(m_payload, r_payload)
+
+    # sum all contributions
+    I_x = I_front_x + I_tail_x + I_fuel_x + I_pay_x
+    I_y = I_front_y + I_tail_y + I_fuel_y + I_pay_y
+    I_z = I_front_z + I_tail_z + I_fuel_z + I_pay_z
+
+    return {
+        "I_x": float(I_x),       # roll
+        "I_y": float(I_y),       # pitch
+        "I_z_yaw": float(I_z),   # yaw
+        "com": com,
+        "mass_total": total_mass
+    }
 
 def airfoil_lift(Cl0, Cl_alpha, alpha0, alpha,alpha_stall=15.0):
     """
@@ -102,7 +181,7 @@ def pitch_x(rotor,r):
     return  collective + theta_root + (theta_tip - theta_root) * (r - Rr) / (Rt - Rr)
 
 
-def pitch_x_forward(rotor,r,sigh):
+def pitch_x_forward(rotor,r,sigh,cyclic_c=rotor["cyclic_c"],cyclic_s=rotor["cyclic_s"],coll=rotor["collective"]):
     """
     Calculates the pitch angle along the blade span assuming linear variation from root to tip in degrees
     """
@@ -110,12 +189,23 @@ def pitch_x_forward(rotor,r,sigh):
     Rt = rotor["Rt"]
     theta_root = rotor["theta_root"] 
     theta_tip = rotor["theta_tip"] 
-    collective = rotor["collective"]
-    theta_1c = rotor["cyclic_c"]
-    theta_1s = rotor["cyclic_s"]
+    collective = coll
+    theta_1c = cyclic_c
+    theta_1s = cyclic_s
 
     return  collective + theta_root + (theta_tip - theta_root) * (r - Rr) / (Rt - Rr) + theta_1c* np.cos(sigh) + theta_1s * np.sin(sigh)
 
+def tail_pitch_x_forward(tail_rotor,r,coll=tail_rotor["collective"]):
+    """
+    Calculates the pitch angle along the blade span assuming linear variation from root to tip in degrees
+    """
+    Rr= tail_rotor["Rr"]
+    Rt = tail_rotor["Rt"]
+    theta_root = tail_rotor["theta_root"] 
+    theta_tip = tail_rotor["theta_tip"] 
+    collective = coll
+
+    return  collective + theta_root + (theta_tip - theta_root) * (r - Rr) / (Rt - Rr)
 
 
 
@@ -418,7 +508,7 @@ def alphaTPP(fuselage_drag,TOGW):
     D_y = fuselage_drag["Dy"]
     D_z = fuselage_drag["Dz"]
     
-    alpha_tpp = np.tanh(D_x/(TOGW*9.8)) #in radians
+    alpha_tpp = np.arctan(D_x/(TOGW*9.8)) #in radians
     return alpha_tpp
 
 def advance_ratio(V,alpha_tpp, Omega, R):
@@ -602,6 +692,3 @@ def Beta(Sigh):
     """
 
     return beta0(rotor["lock_number"]) + rotor["cyclic_c"] * np.cos(Sigh) + rotor["cyclic_s"] * np.sin(Sigh)
-
-
-

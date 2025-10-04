@@ -3,7 +3,8 @@ import pandas as pd
 from Solver import *
 from helper_functions import *
 from Params import *
-import itertools
+from Balance_main_and_tail import balance_main_and_tail
+
 
 def Sim_Start_Hover_Climb(rotor, rotor_aero, engine, flight_condition):
     
@@ -151,7 +152,7 @@ def Sim_Start_Hover_Climb(rotor, rotor_aero, engine, flight_condition):
 """
 
 
-def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition):
+def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition, t_horizon_s):
 
     b = rotor["b"]
     #sigh = np.linspace(0, 2*np.pi, 360)  # azimuth angles for flapping
@@ -179,7 +180,7 @@ def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition):
     B_dot = B1c*Omega  
   
     
-    B0_old = 0 ## Assuming no coning for now
+    B0_old = 0. ## Assuming no coning for now
 
     mu =  V_inf*np.cos(alpha_tpp)/ (Omega * R_tip)  # advance ratio
 
@@ -227,10 +228,6 @@ def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition):
         AR=AR
     )
     
-
-    #Ut = Omega * r + V_inf*np.cos(alpha_tpp)*np.sin(sigh)  # tangential velocity component
-    #Up = V_inf*np.sin(alpha_tpp) + v_fn(r,sigh) + r*B_dot + V_inf*np.sin(B_fn(sigh))*np.cos(sigh)  # axial velocity component
-
     # Check stall across all radii (not just samples)
     # Check stall across all radii and all azimuth angles (sigh)
     r_all = np.linspace(R_root, R_tip, 200)       # dense discretization in radius
@@ -240,11 +237,10 @@ def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition):
         for sigh_val in sigh_all:
             alpha = theta_fn(r, sigh_val) - phi_fn(r, sigh_val)
             if alpha > rotor_aero["alpha_stall"]:
-                print(f"Stall detected at r = {r:.3f} m, sigh = {sigh_val:.3f} rad, alpha = {alpha:.3f} deg")
+                print(f"Stall detected in tail rotor at r = {r:.3f} m, sigh = {sigh_val:.3f} rad, alpha = {alpha:.3f} deg")
                 return {"stall_status": 1, "r": r, "sigh": sigh_val, "alpha": alpha}
 
- 
-    # --- Coning angle iteration ---
+    # # --- Coning angle iteration ---
     tolerance = 1e-2
     max_iter = 7
     iter_count = 0
@@ -261,7 +257,7 @@ def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition):
                                 + V_inf*np.sin(B_fn(sigh))*np.cos(sigh),
             c_fn=c_fn, Cl_fn=Cl_fn,
             R_root=R_root, R_tip=R_tip, I=I, Omega=Omega,
-            N0=200, max_iter=100, tol=1e-3
+            N0=50, max_iter=2, tol=1e-3
         )
         print(B0_new)
 
@@ -281,16 +277,44 @@ def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition):
     print("Converged B0 (coning angle):", B0_final)
     B_fn = lambda sigh: B0_final + B1c*np.cos(sigh)
 
-    
         
-    # Now run the iterative thrust calculation
+    # Now run the first iterative thrust calculation
     res = iterative_solver_forward(
         b=b, rho=rho,
         Ut_fn=lambda r,sigh: Omega * r + V_inf*np.cos(alpha_tpp)*np.sin(sigh),
         Up_fn=lambda r,sigh: V_inf*np.sin(alpha_tpp) + v_fn(r,sigh) + r*B_dot + V_inf*np.sin(B_fn(sigh))*np.cos(sigh),
-        c_fn=c_fn, Cl_fn=Cl_fn, phi_fn=phi_fn, Cd_fn=Cd_fn,
+        c_fn=c_fn, Cl_fn=Cl_fn, 
+        phi_fn=phi_fn, Cd_fn=Cd_fn,
         R_root=R_root, R_tip=R_tip,
-        N0 = 100, max_iter= 100, tol=1e-1
+        N0 = 25, max_iter = 4, tol=1e-3
+    )
+
+    out=balance_main_and_tail(
+        res["Mp"], res["Mr"],
+        alpha_tpp, B1c, V_inf, B0_final,
+        b, rho, t_horizon_s, max_iter = 3
+    )
+    if out["stall_status"]==1:
+        print("Mission not possible due to tail rotor stall.")
+        return
+    
+    theta_fn = lambda r,sigh: pitch_x_forward(rotor, r,sigh, out["cyclic_c"], out["cyclic_s"]) 
+    Cl_fn = lambda r,sigh: airfoil_lift(
+        Cl0=rotor_aero["Cl0"],
+        Cl_alpha=rotor_aero["Cl_alpha"],
+        alpha0=rotor_aero["alpha0"],
+        alpha = theta_fn(r,sigh) - phi_fn(r,sigh),
+        alpha_stall=rotor_aero["alpha_stall"]
+
+    )
+    res = iterative_solver_forward(
+        b=b, rho=rho,
+        Ut_fn=lambda r,sigh: Omega * r + V_inf*np.cos(alpha_tpp)*np.sin(sigh),
+        Up_fn=lambda r,sigh: V_inf*np.sin(alpha_tpp) + v_fn(r,sigh) + r*B_dot + V_inf*np.sin(B_fn(sigh))*np.cos(sigh),
+        c_fn=c_fn, Cl_fn=Cl_fn, 
+        phi_fn=phi_fn, Cd_fn=Cd_fn,
+        R_root=R_root, R_tip=R_tip,
+        N0 = 25, max_iter = 5, tol=5e-4
     )
 
     # Print scalar parameters
@@ -353,8 +377,8 @@ def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition):
         "q (mean over azimuth)": q_1d
     })
 
-    print("\nElemental values along the blade (first 5 radial points):")
-    print(tab_array.head().to_string(index=False))
+    # print("\nElemental values along the blade (first 5 radial points):")
+    # print(tab_array.head().to_string(index=False))
 
     # --- Print converged scalar outputs (including new items) ---
     print("\nConverged results:")
@@ -364,8 +388,12 @@ def Sim_Start_Forward(rotor, rotor_aero, engine, flight_condition):
     print(f"D (Drag)          = {res['D']:.4f} N")
     print(f"Q (Torque)        = {res['Q']:.4f} Nm")
     print(f"P (Power)         = {res['P']:.4f} W")
-    print(f"Rolling moment    = {res['rolling_moment']:.4f} Nm")
-    print(f"Pitching moment   = {res['pitching_moment']:.4f} Nm")
+    print(f"Rolling moment    = {res['Mr']:.4f} Nm")
+    print(f"Pitching moment   = {res['Mp']:.4f} Nm")
+
+    print(f"cyclic_c:          = {out["cyclic_c"]:.2f} deg")
+    print(f"cyclic_s:          = {out["cyclic_s"]:.2f} deg")
+    print(f"Tail collective    = {out["tail_coll"]:.2f} deg")
 
     # # --- Optional: print convergence histories ---
     # print("\nHistory of convergence:")

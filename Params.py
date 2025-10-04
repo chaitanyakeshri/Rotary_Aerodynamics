@@ -1,4 +1,4 @@
-
+import numpy as np
 
 rotor= {
     "b": 4,
@@ -9,8 +9,8 @@ rotor= {
     "theta_root": 0,
     "theta_tip": 0,
     "collective": 0,
-    "cyclic_c":  0,
-    "cyclic_s": 3,
+    "cyclic_c":  0, # default trim values
+    "cyclic_s": 0, 
     "lock_number": 0.002  # @AMSL
 }
 
@@ -26,14 +26,15 @@ rotor_aero = {
 }
 
 tail_rotor = {
-    "b": 2,
+    "b": 5,
     "Rr": 0.1,
-    "Rt": 0.75,
+    "Rt": 2,
     "chord_root": 0.1,
     "chord_tip": 0.1,
     "theta_root": 4.0,
     "theta_tip": 0.0,
-    "collective": 18,
+    "collective": 0,
+    "arm_length": 10, # length of driveshaft
     "power_fraction": 0.2
 }
 
@@ -41,7 +42,7 @@ tail_rotor_aero= {
     "Cl_alpha": 5.73,
     "Cl0": 0.0,
     "Cd0": 0.08,
-    "alpha_stall": 18.0,
+    "alpha_stall": 15,
     "e": 0.8,
     "alpha0": 0,
     "Cm0": -0.020,
@@ -64,7 +65,12 @@ fuselage = {
     "Z_flat_area": 7.0,
     "max_fuel_weight": 1000,
     "Empty_Weight": 5000,
-    
+    # Fuselage design: Two cylinders each with specified length and radii
+    "length_front": 8.0,
+    "length_tail": 10.0,
+    "radius_front": 1.5,
+    "radius_tail": 0.5,
+    "fuel_pos": (0.0,0.0,0.0) # at centroid
 }
 
 horizontal_stabilizers = {
@@ -88,7 +94,8 @@ flight_condition = {
 }
 
 payload = {
-    "weight": 700
+    "weight": 700,
+    "payload_pos": (1.0,0.5,0.0), # relative to centroid
 }
 
 

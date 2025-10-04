@@ -108,8 +108,8 @@ def iterative_solver_forward(
     Cd_fn: Callable[[float, float], float],
     R_root: float,
     R_tip: float,
-    N0: int = 100,
-    max_iter: int = 10,
+    N0: int = 25,
+    max_iter: int = 5,
     tol: float = 1e-3
 ) -> Dict:
 
@@ -117,7 +117,7 @@ def iterative_solver_forward(
         # grids
         R = np.linspace(R_root, R_tip, N)
         SIGH = np.linspace(0, 2*np.pi, 90)
-        R_grid, SIGH_grid = np.meshgrid(R, SIGH, indexing='ij')  # shape (N, 90)
+        R_grid, SIGH_grid = np.meshgrid(R, SIGH, indexing='ij')  # shape (N, 360)
 
 
         # allocate arrays for results
@@ -171,8 +171,6 @@ def iterative_solver_forward(
         V2 = np.where(Ut < 0, -(Ut**2 + Up**2), (Ut**2 + Up**2))
         q = 0.5 * rho * V2
 
-        # differential loads per blade element (2D)
-        # differential loads per blade element (2D)
 
         # prevent division by zero for Ut and radius
         Ut_safe = np.where(np.abs(Ut) < 1e-12, 1e-12, Ut)
@@ -186,8 +184,8 @@ def iterative_solver_forward(
         dP_total_dr_dsigh_1b = Ut * q * c * Cl * (Up / Ut_safe) + (Ut / R_safe_grid) * R_grid * q * c * Cd  # P + Pi
 
         # Moments remain the same
-        rolling_moment_dr_dsigh = dT_dr_dsigh_1b * R_grid * np.cos(SIGH_grid)
-        pitching_moment_dr_dsigh = dT_dr_dsigh_1b * R_grid * np.sin(SIGH_grid)
+        rolling_moment_dr_dsigh = dT_dr_dsigh_1b * R_grid * np.sin(SIGH_grid)
+        pitching_moment_dr_dsigh = -dT_dr_dsigh_1b * R_grid * np.cos(SIGH_grid)
 
         # ---- DOUBLE INTEGRATION ----
         dT_dr_1b = np.trapz(dT_dr_dsigh_1b, x=SIGH, axis=1)
@@ -224,10 +222,6 @@ def iterative_solver_forward(
         history_rolling_moment = []
         history_pitching_moment = []
 
-        T_prev = D_prev = Q_prev = P_prev = None
-        rolling_moment_prev = pitching_moment_prev = None
-
-
 
         if T_prev is not None:
             rel_err_T = abs((T - T_prev) / T_prev) if T_prev != 0 else np.inf
@@ -236,16 +230,17 @@ def iterative_solver_forward(
             rel_err_P = abs((P - P_prev) / P_prev) if P_prev != 0 else np.inf
             rel_err_rolling_moment = abs((rolling_moment - rolling_moment_prev) / rolling_moment_prev) if rolling_moment_prev != 0 else np.inf
             rel_err_pitching_moment = abs((pitching_moment - pitching_moment_prev) / pitching_moment_prev) if pitching_moment_prev != 0 else np.inf
+            
             # check relative errors
-          
-            if max(rel_err_T, rel_err_Q, rel_err_P, rel_err_D,rel_err_pitching_moment,rel_err_rolling_moment) < tol:
+            # print(rel_err_pitching_moment,rel_err_rolling_moment,rel_err_T)
+            if max(rel_err_T,rel_err_pitching_moment,rel_err_rolling_moment) < tol:
                 return {
                     "T": float(T), "D": float(D), "Q": float(Q), "P": float(P),
                     "N": N,
                     "R": R,                     # 1D radial coordinates
                     "SIGH": SIGH, # 1D azimuth coordinates                 # Coning Angle
-                    "rolling_moment": float(rolling_moment),        
-                    "pitching_moment": float(pitching_moment),
+                    "Mr": float(rolling_moment),        
+                    "Mp": float(pitching_moment),
                     "dT_dr_per_blade": dT_dr_1b,
                     "dD_dr_per_blade": dD_total_dr_1b,
                     "dQ_dr_per_blade": dQ_total_dr_1b,
@@ -261,15 +256,15 @@ def iterative_solver_forward(
                 }
 
         T_prev, D_prev, Q_prev, P_prev,rolling_moment_prev,pitching_moment_prev = T, D, Q, P,rolling_moment,pitching_moment
+        N=N*2
 
-    print("Thrust:", T, "Power:", P)
     return {
         "T": float(T), "D": float(D), "Q": float(Q), "P": float(P),
         "N": N,
         "R": R,                     # 1D radial coordinates
         "SIGH": SIGH, # 1D azimuth coordinates                
-        "rolling_moment": float(rolling_moment),        
-        "pitching_moment": float(pitching_moment),
+        "Mr": float(rolling_moment),        
+        "Mp": float(pitching_moment),
         "dT_dr_per_blade": dT_dr_1b,
         "dD_dr_per_blade": dD_total_dr_1b,
         "dQ_dr_per_blade": dQ_total_dr_1b,
@@ -286,7 +281,6 @@ def iterative_solver_forward(
     }
 
 
-
 def Coning_Angle_Solver(
     rho: float,
     Ut_fn: Callable[[float, float], float],
@@ -297,15 +291,15 @@ def Coning_Angle_Solver(
     R_tip: float,
     I:float,
     Omega:float,
-    N0: int = 200,
-    max_iter: int = 10,
+    N0: int = 25,
+    max_iter: int = 4,
     tol: float = 1e-3
 ) -> Dict:
 
     def compute_B0_on_meshgrid(N: int):
         # grids
         R = np.linspace(R_root, R_tip, N)
-        SIGH = np.linspace(0, 2*np.pi, 360)
+        SIGH = np.linspace(0, 2*np.pi, 90)
         R_grid, SIGH_grid = np.meshgrid(R, SIGH, indexing='ij')  # shape (N, 360)
         # allocate arrays for results
         Ut  = np.empty_like(R_grid)
@@ -342,7 +336,7 @@ def Coning_Angle_Solver(
         # ---- DOUBLE INTEGRATION ----
         dB0_dr = np.trapz(dB0_dr_dsigh, x=SIGH, axis=1)
         # integrate over radius
-        B0 = np.trapz(dB0_dr, x=R) / (2 * np.pi)
+        B0 = np.trapz(dB0_dr, x=R)
         return  B0
 
     N = N0
@@ -358,4 +352,99 @@ def Coning_Angle_Solver(
                 return B0
 
         B0_prev =  B0
+        N=N*2
     return B0
+
+def iterative_solver_cyclic(
+    b: int,
+    rho: float,
+    Ut_fn: Callable[[float, float], float],
+    Up_fn: Callable[[float, float], float],
+    c_fn: Callable[[np.ndarray], np.ndarray],            # c_fn(R) -> 1D array of chord vs R
+    Cl_fn: Callable[[float, float], float],
+    R_root: float,
+    R_tip: float,
+    N0: int = 50,
+    max_iter: int = 10,
+    tol: float = 1e-3
+) -> Dict:
+    
+    def compute_T_D_Q_P_on_grid(N: int):
+        # grids
+        R = np.linspace(R_root, R_tip, N)
+        SIGH = np.linspace(0, 2*np.pi, 90)
+        R_grid, SIGH_grid = np.meshgrid(R, SIGH, indexing='ij')  # shape (N, SIGH_points)
+
+        # ---- compute Ut, Up, Cl ----
+        # allocate arrays for results
+        Ut  = np.empty_like(R_grid)
+        Up  = np.empty_like(R_grid)
+        Cl  = np.empty_like(R_grid)
+
+        # loop element-wise
+        for i in range(R_grid.shape[0]):      # over radius
+            for j in range(R_grid.shape[1]):  # over azimuth
+                R_val = R_grid[i, j]
+                sigh_val = SIGH_grid[i, j]
+
+                Ut[i, j]  = Ut_fn(R_val, sigh_val)
+                Up[i, j]  = Up_fn(R_val, sigh_val)
+                Cl[i, j]  = Cl_fn(R_val, sigh_val)
+
+        # chord only varies with radius
+        c_1d = c_fn(R)                    # shape (N,)
+        c = np.tile(c_1d[:, np.newaxis], (1, len(SIGH)))  # shape (N, 360)
+
+        # ---- dynamic pressure ----
+        V2 = np.where(Ut < 0, -(Ut**2 + Up**2), (Ut**2 + Up**2))
+        q = 0.5 * rho * V2
+
+        # differential loads per blade element
+        dT_dr_dsigh_1b = q * c * Cl
+        rolling_moment_dr_dsigh = dT_dr_dsigh_1b * R_grid * np.sin(SIGH_grid)
+        pitching_moment_dr_dsigh = -dT_dr_dsigh_1b * R_grid * np.cos(SIGH_grid)
+
+        # ---- integrate over azimuth ----
+        dT_dr_1b = np.trapz(dT_dr_dsigh_1b, x=SIGH, axis=1)
+        rolling_moment_dr = np.trapz(rolling_moment_dr_dsigh, x=SIGH, axis=1)
+        pitching_moment_dr = np.trapz(pitching_moment_dr_dsigh, x=SIGH, axis=1)
+
+        # ---- integrate over radius ----
+        T = b * np.trapz(dT_dr_1b, x=R) / (2 * np.pi)
+        rolling_moment = b * np.trapz(rolling_moment_dr, x=R) / (2 * np.pi)
+        pitching_moment = b * np.trapz(pitching_moment_dr, x=R) / (2 * np.pi)
+
+
+        return T, rolling_moment, pitching_moment
+    
+    N = N0
+    T_prev = rolling_moment_prev=pitching_moment_prev= None
+
+    for it in range(max_iter):
+        T, rolling_moment, pitching_moment= compute_T_D_Q_P_on_grid(N)
+
+        if T_prev is not None:
+            rel_err_T = abs((T - T_prev) / T_prev) if T_prev != 0 else np.inf
+            rel_err_rolling_moment = abs((rolling_moment - rolling_moment_prev) / rolling_moment_prev) if rolling_moment_prev != 0 else np.inf
+            rel_err_pitching_moment = abs((pitching_moment - pitching_moment_prev) / pitching_moment_prev) if pitching_moment_prev != 0 else np.inf
+            # check relative errors
+            # print(rel_err_pitching_moment,rel_err_rolling_moment,rel_err_T)
+
+            if max(rel_err_T,rel_err_pitching_moment,rel_err_rolling_moment) < tol:
+                return {
+                    "T": float(T),
+                    "Mr": float(rolling_moment),        
+                    "Mp": float(pitching_moment),
+                    "stall_status": 0
+                }
+
+        T_prev, rolling_moment_prev, pitching_moment_prev = T, rolling_moment, pitching_moment
+        N=N*2
+    
+    return {
+        "T": float(T),            
+        "Mr": float(rolling_moment),        
+        "Mp": float(pitching_moment),
+        "stall_status": 0,
+        "warning": "Did not converge"
+    }
