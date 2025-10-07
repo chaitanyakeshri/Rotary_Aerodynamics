@@ -104,6 +104,7 @@ def iterative_solver_forward(
     Up_fn: Callable[[float, float], float],
     c_fn: Callable[[np.ndarray], np.ndarray],            # c_fn(R) -> 1D array of chord vs R
     Cl_fn: Callable[[float, float], float],
+    v_fn: Callable[[float, float], float],
     phi_fn: Callable[[float, float], float],
     Cd_fn: Callable[[float, float], float],
     R_root: float,
@@ -123,6 +124,7 @@ def iterative_solver_forward(
         # allocate arrays for results
         Ut  = np.empty_like(R_grid)
         Up  = np.empty_like(R_grid)
+        v  = np.empty_like(R_grid)
         Cl  = np.empty_like(R_grid)
         phi = np.empty_like(R_grid)
         Cd  = np.empty_like(R_grid)
@@ -135,6 +137,7 @@ def iterative_solver_forward(
 
                 Ut[i, j]  = Ut_fn(R_val, sigh_val)
                 Up[i, j]  = Up_fn(R_val, sigh_val)
+                v[i, j]  = v_fn(R_val, sigh_val)
                 phi[i, j] = phi_fn(R_val, sigh_val)
                 Cl[i, j]  = Cl_fn(R_val, sigh_val)
                 Cd[i, j]  = Cd_fn(R_val, sigh_val)
@@ -205,14 +208,14 @@ def iterative_solver_forward(
         pitching_moment = b * np.trapz(pitching_moment_dr, x=R) / (2 * np.pi)
 
 
-        return T, D_total, Q_total, P_total, R, SIGH,rolling_moment,pitching_moment,dT_dr_1b, dD_total_dr_1b, dQ_total_dr_1b, dP_total_dr_1b, q
+        return T, D_total, Q_total, P_total, R, SIGH,rolling_moment,pitching_moment,dT_dr_1b, dD_total_dr_1b, dQ_total_dr_1b, dP_total_dr_1b, q, v
 
     N = N0
     history_T, history_D, history_Q, history_P, history_rolling_moment,history_pitching_moment= [], [], [], [], [], []
     T_prev = D_prev = Q_prev = P_prev = rolling_moment_prev=pitching_moment_prev= None
 
     for it in range(max_iter):
-        T, D, Q, P, R, SIGH,rolling_moment,pitching_moment,dT_dr_1b, dD_total_dr_1b, dQ_total_dr_1b, dP_total_dr_1b, q= compute_T_D_Q_P_on_grid(N)
+        T, D, Q, P, R, SIGH,rolling_moment,pitching_moment,dT_dr_1b, dD_total_dr_1b, dQ_total_dr_1b, dP_total_dr_1b, q, v= compute_T_D_Q_P_on_grid(N)
 
         # --- history initialization (ensure counts match) ---
         history_T = []
@@ -246,6 +249,7 @@ def iterative_solver_forward(
                     "dQ_dr_per_blade": dQ_total_dr_1b,
                     "dP_dr_per_blade": dP_total_dr_1b,
                     "q": q,
+                    "v": v,
                     "history_T": history_T,
                     "history_D": history_D,
                     "history_Q": history_Q,
@@ -270,6 +274,7 @@ def iterative_solver_forward(
         "dQ_dr_per_blade": dQ_total_dr_1b,
         "dP_dr_per_blade": dP_total_dr_1b,
         "q": q,
+        "v": v,
         "history_T": history_T,
         "history_D": history_D,
         "history_Q": history_Q,

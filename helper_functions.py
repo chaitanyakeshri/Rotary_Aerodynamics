@@ -1,6 +1,5 @@
 import numpy as np
 import math
-## functional imports 
 from Solver import *
 from Params import * 
 import numpy as np
@@ -195,14 +194,14 @@ def pitch_x_forward(rotor,r,sigh,cyclic_c=rotor["cyclic_c"],cyclic_s=rotor["cycl
 
     return  collective + theta_root + (theta_tip - theta_root) * (r - Rr) / (Rt - Rr) + theta_1c* np.cos(sigh) + theta_1s * np.sin(sigh)
 
-def tail_pitch_x_forward(tail_rotor,r,coll=tail_rotor["collective"]):
+def tail_pitch_x_forward(tail_rotor_,r,coll=tail_rotor["collective"]):
     """
     Calculates the pitch angle along the blade span assuming linear variation from root to tip in degrees
     """
-    Rr= tail_rotor["Rr"]
-    Rt = tail_rotor["Rt"]
-    theta_root = tail_rotor["theta_root"] 
-    theta_tip = tail_rotor["theta_tip"] 
+    Rr= tail_rotor_["Rr"]
+    Rt = tail_rotor_["Rt"]
+    theta_root = tail_rotor_["theta_root"] 
+    theta_tip = tail_rotor_["theta_tip"] 
     collective = coll
 
     return  collective + theta_root + (theta_tip - theta_root) * (r - Rr) / (Rt - Rr)

@@ -18,7 +18,7 @@ rotor_aero = {
     "Cl_alpha": 5.73,
     "Cl0": 0.2,
     "Cd0": 0.01,
-    "alpha_stall": 13.0,
+    "alpha_stall": 15.0,
     "e": 0.8,
     "alpha0": -1,
     "Cm0": -0.02,
@@ -42,7 +42,7 @@ tail_rotor_aero= {
     "Cl_alpha": 5.73,
     "Cl0": 0.0,
     "Cd0": 0.08,
-    "alpha_stall": 15,
+    "alpha_stall": 18,
     "e": 0.8,
     "alpha0": 0,
     "Cm0": -0.020,
@@ -76,13 +76,19 @@ fuselage = {
 horizontal_stabilizers = {
     "horiz_area": 4.18,
     "horiz_Cd": 0.05,
-    "horiz_arm": 5.0
+    "x_arm": 10.0
 }
 
 vertical_stabilizers = {
     "verti_area": 1.92,
-    "verti_Cd": 0.05,
-    "verti_arm": 5.0
+    "verti_Cd": 0.02,
+    "x_arm": 10,
+    "z_arm": 1.1,
+    "Cl_alpha": 5.73,
+    "Cl0": 0,
+    "alpha0": 0,
+    "alpha_stall":15,
+    "e": 0.8
 }
 
 flight_condition = {
